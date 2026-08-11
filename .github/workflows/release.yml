@@ -1,0 +1,44 @@
+name: Build release artifacts
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-arm64
+            runner: macos-15
+          - platform: macos-intel
+            runner: macos-15-intel
+          - platform: linux-x64
+            runner: ubuntu-latest
+          - platform: windows-x64
+            runner: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: python -m pip install --upgrade pip build
+      - name: Build Python distributions
+        run: python -m build
+      - name: Package installer assets
+        shell: bash
+        run: |
+          mkdir -p artifact
+          cp -R dist artifact/dist
+          cp release/install.sh artifact/install.sh
+          cp release/install.ps1 artifact/install.ps1
+          echo "Linux arm64 prebuilt binary is not available in this workflow." > artifact/README.txt
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: contextd-${{ matrix.platform }}
+          path: artifact
+

@@ -1,6 +1,6 @@
 # Agent Context Kit Quickstart
 
-This guide gets a local knowledge workspace running in a few minutes.
+This guide gets a working contextd setup and local knowledge workspace running in a few minutes.
 
 ## 1. Install
 
