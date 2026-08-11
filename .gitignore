@@ -20,6 +20,7 @@ workspaces/*/eval/results/*
 workspaces/*/.observations/prompts.jsonl
 workspaces/*/.observations/*.lock
 workspaces/*
+!workspaces/README.md
 !workspaces/default
 
 # Release artifacts — built by scripts/package-release.sh
