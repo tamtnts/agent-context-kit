@@ -1,6 +1,6 @@
 # Wiki Reference
 
-Detailed reference for `contextd`. CLAUDE.md links here for material that doesn't need to be in the agent's hot-path instructions.
+Detailed reference for Agent Context Kit. CLAUDE.md links here for material that doesn't need to be in the agent's hot-path instructions.
 
 ## Knowledge Structure
 

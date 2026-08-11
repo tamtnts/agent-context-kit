@@ -6,7 +6,7 @@
 
 | Layer | Lives In | Managed By | Update Frequency |
 |-------|----------|------------|------------------|
-| **Engine** | `tamtnts/agent-context-kit` (upstream) | Upstream maintainer | When new releases drop |
+| **Core kit** | `tamtnts/agent-context-kit` | Repository owner | When new releases are published |
 | **Knowledge** | Your team's private repo | Your team | Daily, as you work |
 
 - **Engine** = CLI, slash-command adapters, subagents, templates, packs, system prompts. You install it once and re-run when upstream updates.
@@ -170,7 +170,7 @@ bash ~/contextd/scripts/contextd-team-sync.sh pull
 
 ## Updating the Engine (Upstream)
 
-When `tamtnts/agent-context-kit` releases updates:
+When `tamtnts/agent-context-kit` publishes updates:
 
 ```bash
 cd ~/contextd

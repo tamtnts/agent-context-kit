@@ -11,13 +11,13 @@ contextd is a governed build layer for AI agent inputs. It is designed to coexis
 | Cursor rules / Claude memory | Client-native persistent instructions. | contextd exports adapter-specific surfaces from one canonical workspace model. |
 | Vector DB / knowledge base | Broad retrieval over large corpora. | contextd builds deterministic context artifacts with explicit gaps, budgets, and source hashes. |
 
-## contextd vs MCP
+## Agent Context Kit vs MCP
 
 MCP is a transport and capability protocol. It tells clients how to call tools, read resources, and fetch prompts. It does not define a team's context lifecycle, workspace isolation model, policy checks, pack semantics, or deterministic task artifact.
 
 contextd uses MCP as one adapter surface. The canonical model remains `.contextd/config.json`, workspace knowledge, packs, policies, and `contextd_task_context.v1`.
 
-## contextd vs Code Graph Tools
+## Agent Context Kit vs Code Graph Tools
 
 Code graph tools are excellent when the question is structural:
 
@@ -36,7 +36,7 @@ contextd is for the governance layer around that work:
 
 These tools can complement each other. A code intelligence result can become evidence or workspace knowledge. It should not silently replace the deterministic context artifact.
 
-## contextd vs Cursor Rules and Claude Memory
+## Agent Context Kit vs Cursor Rules and Claude Memory
 
 Client-native rules are convenient, but they tend to become client-specific instruction surfaces. contextd treats those surfaces as exports from a canonical model:
 
@@ -47,7 +47,7 @@ Client-native rules are convenient, but they tend to become client-specific inst
 
 The build source remains the workspace and pack model, not a single client memory file.
 
-## contextd vs Vector DBs and Knowledge Bases
+## Agent Context Kit vs Vector DBs and Knowledge Bases
 
 Vector search is useful for discovery, especially when users do not know what exists. contextd keeps search advisory because governed agent inputs need stricter properties:
 

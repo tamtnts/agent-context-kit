@@ -201,7 +201,7 @@ Command H1 titles rewritten to `# /contextd-{verb} — <descriptive>` so the ski
 - Prints a migration notice telling users to update any codebase `<cwd>/.claude/wiki.json` field `"workspace": "wiki"` → `"default"`.
 
 #### Onboarding HTML
-Download buttons in `onboarding/install.{html,en.html}` now point to `contextd-latest.zip`. Titles, headings, and footer branding switched to `contextd` (with `formerly Workspace Wiki` notes in source comments for traceability).
+Download buttons in `onboarding/install.{html,en.html}` now point to `contextd-latest.zip`. Titles, headings, and footer branding switched to Agent Context Kit (with `legacy workspace guide` notes in source comments for traceability).
 
 ### Kept (deferred to v1.0)
 Legacy filenames are intentionally **not** renamed in v0.x to avoid breaking existing user installs and pointer files:

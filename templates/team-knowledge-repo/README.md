@@ -1,6 +1,6 @@
 # Team Knowledge Repo
 
-This is your team's private knowledge repository for [contextd](https://github.com/tamtnts/agent-context-kit).
+This is your team's private knowledge repository for [Agent Context Kit](https://github.com/tamtnts/agent-context-kit).
 
 It contains only `workspaces/` (and optionally packs/contracts local to your team). The engine (slash commands, subagents, templates) lives in a separate upstream repo and is installed via `scripts/install-to-claude.sh`.
 

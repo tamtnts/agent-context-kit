@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""contextd — Build system for AI coding-agent context."""
+"""Agent Context Kit - local context tooling for AI coding agents."""
 
 from __future__ import annotations
 
@@ -202,7 +202,7 @@ def _command_line(meta: CommandMeta) -> str:
 
 def _render_starter_help() -> str:
     lines = [
-        "contextd — build deterministic context for coding agents",
+        "Agent Context Kit - build scoped context for coding agents",
         "",
         "Start here:",
     ]
@@ -216,17 +216,17 @@ def _render_starter_help() -> str:
         '  contextd explain "prepare agent context for product requirements" --text',
         "",
         "More:",
-        "  contextd help --all        Show every command grouped by workflow",
-        "  contextd <command> --help  Show flags for one command",
+        "  agentctx help --all       Show every command grouped by workflow",
+        "  agentctx <command> --help Show flags for one command",
     ])
     return "\n".join(lines) + "\n"
 
 
 def _render_all_help() -> str:
     lines = [
-        "contextd commands",
+        "Agent Context Kit commands",
         "",
-        "Use `contextd <command> --help` for command-specific flags.",
+        "  agentctx <command> --help Show flags for one command",
     ]
     for group in GROUP_ORDER:
         group_commands = [
@@ -242,7 +242,7 @@ def _render_all_help() -> str:
 
 def _render_recipes() -> str:
     return "\n".join([
-        "contextd recipes",
+        "Agent Context Kit recipes",
         "",
         "First run:",
         "  contextd init",
@@ -513,7 +513,7 @@ def _connect_cmd(args) -> int:
         )
         return 1
 
-    print(f"# contextd MCP config for {args.client}")
+    print(f"# Agent Context Kit MCP config for {args.client}")
     print("# Add this snippet to your MCP-capable client configuration.")
     return cmd_mcp_config.run(
         client=args.client,
@@ -611,13 +611,13 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(
         prog="contextd",
-        description="Build system for AI coding-agent context",
+        description="Local-first context toolkit for AI coding agents",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {__version__}",
+        version=f"%(prog)s {__version__} (Agent Context Kit)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
