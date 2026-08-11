@@ -1,0 +1,327 @@
+# /contextd-report — Generate Workspace Report
+
+Sinh **technical report dạng HTML** tổng hợp từ wiki của workspace active. **One-shot**: 1 lệnh → 1 file HTML self-contained. Không dependency, mở browser xem ngay.
+
+> Output là tài liệu trình bày — KHÔNG dùng làm input cho task code (đó là việc của `/contextd-use`).
+> Reference: [report-prompts.md](../../agents/pipeline/report-prompts.md), [HTML skeleton](../../templates/report-html-skeleton.html).
+
+---
+
+## Input
+
+| Arg | Required | Notes |
+|---|---|---|
+| `--out` | optional | Đường dẫn output. Default: `{ws}/reports/{YYYY-MM-DD}-technical-report.html`. Nếu cùng ngày đã có file → suffix `-{HHMMSS}`. |
+| `--open` | optional | Sau khi sinh file, in command gợi ý mở browser (`start "" {path}` trên Windows, `open {path}` trên macOS). Không tự exec để tránh side-effect. |
+
+Không có flag scope — report luôn bao gồm 6 nhóm: Overview, Architecture, Contracts, Patterns, Domains, ADRs, Runbooks. Để hẹp scope, edit file output sau.
+
+Không bao gồm `evidence/` raw — đó là dữ liệu thô, không phải report content.
+
+---
+
+## Bước 0 — Workspace check
+
+1. Tìm `.claude/wiki.json`: từ `<cwd>` đi lên parent. Lưu `wiki_json_dir`.
+2. Đọc file → `workspace` + `wiki_root` resolve theo [system-prompt.md `wiki_root` Resolution Rule](../../agents/system-prompt.md):
+   - Absolute path → dùng nguyên
+   - Relative (`"."`, `"./..."`) → resolve relative TỚI `project_root` (= parent của `.claude/`)
+   - `null`/empty → fallback `~/.claude/wiki-global.json#wiki_root`
+3. STOP nếu file thiếu hoặc `.workspace` rỗng → guide `/switch-workspace` hoặc `/contextd-setup`.
+4. Set `workspace_active`, `effective_wiki_root`, `{ws} = {effective_wiki_root}/workspaces/{workspace_active}/`.
+5. Validate: `{ws}/workspace.md` tồn tại. Nếu không → STOP `Workspace not initialized — run /new-workspace {workspace_active}`.
+6. **Resolve effective packs** (cùng mechanism với [workspace-resolution.md](../../agents/pipeline/workspace-resolution.md)):
+   - Đọc `wiki.json#packs`: nếu là array → `effective_packs = wiki.json#packs`
+   - Nếu null/thiếu → parse `{ws}/workspace.md ## Packs` section → `effective_packs`
+   - Nếu cả hai đều rỗng → `effective_packs = []`
+   - Lưu `effective_packs` (list of pack name strings, vd `["pack-ba", "pack-dba"]`).
+
+---
+
+## Bước 1 — Discovery
+
+Glob từng nhóm trong `{ws}/`. Kết quả lưu vào in-memory map `discovery`:
+
+```
+discovery = {
+  overview:     [{ws}/workspace.md] (luôn 1 file)
+  architecture: glob {ws}/platform/architecture/*.md
+  projects:     glob {ws}/projects/*/   (mỗi sub-folder = 1 project)
+    per project:
+      knowledge_map: {ws}/projects/{p}/knowledge-map.md  (nếu có)
+      services:      glob {ws}/projects/{p}/services/*.md
+      decisions:     glob {ws}/projects/{p}/decisions/*.md
+  contracts:    glob {ws}/platform/contracts/*.md
+  patterns_idx: {ws}/patterns-index.md  (nếu có)
+  patterns:     glob {ws}/platform/patterns/*.md
+  domains:      glob {ws}/domains/*/    (mỗi sub-folder = 1 domain)
+    per domain: glob {ws}/domains/{d}/*.md
+  adrs_ws:      glob {ws}/decisions/*.md
+  runbooks:     glob {ws}/runbooks/*.md
+}
+```
+
+**KHÔNG glob** `{ws}/evidence/` (loại trừ tuyệt đối).
+
+**Pack-conditional discovery** (chỉ chạy nếu pack tương ứng trong `effective_packs`):
+
+```
+IF "pack-event-driven" IN effective_packs:
+  discovery.event_driven.kafka_patterns = glob {ws}/platform/patterns/kafka*.md
+  discovery.event_driven.mqtt_patterns  = glob {ws}/platform/patterns/mqtt*.md
+  discovery.event_driven.batch_patterns = glob {ws}/platform/patterns/batch*.md
+
+IF "pack-web-api" IN effective_packs:
+  discovery.web_api.api_contracts = glob {ws}/platform/contracts/api*.md
+  discovery.web_api.api_patterns  = glob {ws}/platform/patterns/api*.md
+
+IF "pack-product" IN effective_packs:
+  discovery.product.briefs   = glob {ws}/product/briefs/*.md
+  discovery.product.okrs     = glob {ws}/product/okrs/*.md
+  discovery.product.roadmap  = {ws}/product/roadmap.md  (nếu tồn tại)
+  discovery.product.personas = glob {ws}/product/personas/*.md
+  discovery.product.journeys = glob {ws}/product/journeys/*.md
+  discovery.product.metrics  = {ws}/product/metrics.md  (nếu tồn tại)
+
+IF "pack-ba" IN effective_packs:
+  discovery.ba.requirements = glob {ws}/domains/*/requirements.md
+  discovery.ba.acceptance   = glob {ws}/ba/acceptance-criteria/*.md
+  discovery.ba.process      = glob {ws}/domains/*/process*.md
+
+IF "pack-dba" IN effective_packs:
+  discovery.dba.schema   = glob {ws}/domains/*/schema*.md
+  discovery.dba.backup   = glob {ws}/domains/*/backup*.md
+  discovery.dba.dba_docs = glob {ws}/dba/*.md
+
+IF "pack-security" IN effective_packs:
+  discovery.security.threat_models  = glob {ws}/platform/security/*.md
+  discovery.security.domain_threats = glob {ws}/domains/*/threat-model.md
+  discovery.security.findings       = glob {ws}/security/findings/*.md
+
+IF "pack-qc" IN effective_packs:
+  discovery.qc.quality = glob {ws}/platform/quality/*.md
+  discovery.qc.testing = glob {ws}/testing/*.md
+  discovery.qc.defects = glob {ws}/defects/*.md
+
+IF "pack-ui-ux" IN effective_packs:
+  discovery.ui_ux.design_system = {ws}/platform/design/design-system.md (nếu tồn tại)
+  discovery.ui_ux.tokens        = {ws}/platform/design/tokens.md (nếu tồn tại)
+  discovery.ui_ux.a11y          = {ws}/platform/design/a11y.md (nếu tồn tại)
+  discovery.ui_ux.ux_writing    = {ws}/platform/design/ux-writing.md (nếu tồn tại)
+  discovery.ui_ux.flows         = glob {ws}/domains/*/flows/*.md
+  discovery.ui_ux.design_adrs   = glob {ws}/design/decisions/*.md
+```
+
+`file_count` = tổng file trong tất cả group. Nếu = 0 (workspace trống ngoài workspace.md) → vẫn tiếp tục, mỗi section sẽ ghi `nodata`.
+
+---
+
+## Bước 2 — Read & parse
+
+Đọc tuần tự từng file trong `discovery`. Với mỗi file:
+
+1. Strip YAML front-matter nếu có (`---\n...\n---` ở đầu file).
+2. Lưu raw markdown vào `parsed[file_path] = {title, status, body_md}` trong đó:
+   - `title` = H1 đầu tiên (bỏ `#`).
+   - `status` = grep `Status:\s*(\w+)` → match đầu tiên (chỉ ADR cần). Default `null`.
+   - `body_md` = nội dung sau khi strip H1 và front-matter.
+
+Limit file size: nếu 1 file > 100KB → đọc đủ, KHÔNG truncate (full report). Nếu 1 file > 500KB → WARN, vẫn đọc.
+
+---
+
+## Bước 3 — Cross-reference
+
+Build 2 map adoption:
+
+### 3.1 Pattern adoption
+Cho mỗi pattern file `platform/patterns/{name}.md`:
+- Grep tên file (`{name}.md` HOẶC `platform/patterns/{name}`) trong tất cả `projects/{p}/services/*.md`.
+- Lưu `pattern_adoption[name] = [list service paths]`.
+
+### 3.2 Contract usage
+Cho mỗi contract file `platform/contracts/{name}.md`:
+- Grep tên file trong tất cả `projects/{p}/services/*.md`.
+- Lưu `contract_usage[name] = [list service paths]`.
+
+Dùng Grep tool với glob `{ws}/projects/**/services/*.md` (đã có Grep tool, không cần shell).
+
+---
+
+## Bước 4 — Generate HTML
+
+1. Đọc 2 file template **1 lần duy nhất** ở đầu bước (KHÔNG compose HTML từ đầu):
+   - `templates/report-html-skeleton.html` — outer shell với 14 placeholder
+   - `templates/report-fragments.html` — kho copy/paste fragments cho từng loại block
+2. Cho mỗi section, dùng đúng fragment trong cheat sheet [report-prompts.md "Fragment cheat sheet"](../../agents/pipeline/report-prompts.md). Copy fragment → thay `{{PLACEHOLDER}}` bằng giá trị thực → concat. KHÔNG tự sáng tác `<div>`/`<span>`/CSS class mới — dùng đúng class trong skeleton (`cite`, `badge`, `nodata`, `details-body`, `mermaid-fallback`).
+3. Cho mỗi placeholder của skeleton, sinh content theo rules trong [report-prompts.md "Section composition rules"](../../agents/pipeline/report-prompts.md):
+
+| Placeholder | Source |
+|---|---|
+| `{{WORKSPACE}}` | `workspace_active` |
+| `{{DATE}}` | `YYYY-MM-DD` hôm nay |
+| `{{TIMESTAMP}}` | `YYYY-MM-DD HH:MM:SS` UTC |
+| `{{WIKI_ROOT}}` | `effective_wiki_root` (display only) |
+| `{{FILE_COUNT}}` | `file_count` từ discovery |
+| `{{ARCHITECTURE_NAV}}` | `<li>` per project |
+| `{{OVERVIEW_BODY}}` | render từ `workspace.md` |
+| `{{ARCHITECTURE_BODY}}` | render `platform/architecture/*` + per-project knowledge-map + services trong `<details>` |
+| `{{CONTRACTS_BODY}}` | render `platform/contracts/*` + badge "Used by" từ `contract_usage` |
+| `{{PATTERNS_BODY}}` | render `patterns-index.md` + `platform/patterns/*` + badge adoption |
+| `{{DOMAINS_BODY}}` | render `domains/{d}/*` |
+| `{{ADRS_BODY}}` | summary table + `<details>` per ADR (workspace + project) |
+| `{{RUNBOOKS_BODY}}` | render `runbooks/*` |
+| `{{MD_CACHE_JSON}}` | JSON object map `{ "<ws-root-relative-path>": "<raw-markdown>", ... }` của TẤT CẢ file trong discovery (xem rule build dưới) |
+
+### Build `{{MD_CACHE_JSON}}` (cho dialog preview)
+
+Skeleton có sẵn `<dialog>` + JS render markdown. Khi user click link `.md` trong report, JS tra cứu file trong `MD_CACHE` (parsed từ inline JSON `<script type="application/json" id="md-cache">`) và render trong dialog. Quy tắc build:
+
+1. **Keys**: path relative TỪ workspace root (vd `platform/contracts/mqtt-topic-contract.md`, `workspace.md`, `projects/surgery-service/services/kafka-consumer.md`). KHÔNG có prefix `../`, KHÔNG có leading `/`.
+2. **Values**: nội dung **raw markdown** của file (KHÔNG strip front-matter — JS sẽ tự strip; preserve nguyên xi để click vào trong dialog hiển thị đúng tài liệu gốc).
+3. **Bao gồm**: mọi file trong `discovery` (workspace.md, architecture/*, contracts/*, patterns/*, patterns-index.md, mỗi project's knowledge-map.md + services/* + decisions/*, domains/*/*, decisions/*, runbooks/*). Đây cũng là tập file được citation trong report.
+4. **KHÔNG bao gồm**: file trong `evidence/`, file ngoài workspace, README/license của repo gốc.
+5. **JSON serialize** đúng spec: escape `"` `\` `\n` `\r` `\t` + control chars ` `-``. Dùng UTF-8 raw — KHÔNG escape Unicode (cho phép `ensure_ascii=False`).
+6. **Embed safety**: sau khi serialize, replace `</` thành `<\/` để tránh script-tag bị đóng sớm khi nội dung chứa chuỗi `</script>` hoặc HTML close tag literal.
+7. **Size guard**: tổng JSON < 2MB. Nếu vượt → STOP, gợi ý hẹp scope hoặc bật `--no-md-cache` (future flag, chưa implement).
+
+Vd output cho 2 file:
+```json
+{"workspace.md":"# Workspace — Example Surgery\n\n> Sample workspace...","platform/contracts/mqtt-topic-contract.md":"# MQTT Topic Contract\n\n## Format\n\n```\ntopic/{region}/..."}
+```
+
+Khi đặt vào skeleton: `<script id="md-cache" type="application/json">{...JSON đã `</`-escape...}</script>`.
+
+4. **Pack sub-section injection** (sau khi gen xong từng section body, trước khi đặt vào skeleton):
+
+   Với mỗi pack trong `effective_packs`, gọi logic `pack_subsection(pack, discovery_group, title)`:
+   - Pack không active → skip, không inject gì.
+   - Pack active, nhưng tất cả glob trong group = 0 file → inject:
+     ```html
+     <!-- pack:{PACK_NAME} -->
+     <h3>{title} <span class="badge warn">No data</span></h3>
+     <p class="nodata">Pack {pack} active but no content found in this workspace.</p>
+     ```
+   - Pack active và có file → inject `<h3>{title}</h3>` + loop files theo fragment `pack-subsection-file`.
+
+   Injection map (inject **cuối** body của section tương ứng):
+
+   | Pack | Inject vào | Sub-section title |
+   |---|---|---|
+   | `pack-event-driven` | `ARCHITECTURE_BODY` | Event Processing Layer |
+   | `pack-web-api` | `ARCHITECTURE_BODY` | API Layer |
+   | `pack-ui-ux` | `ARCHITECTURE_BODY` | Design System & UX |
+   | `pack-product` | `OVERVIEW_BODY` | Product Context |
+   | `pack-ba` | `DOMAINS_BODY` | Business Analysis |
+   | `pack-dba` | `DOMAINS_BODY` | Database Operations |
+   | `pack-security` | `ADRS_BODY` | Security & Threat Model |
+   | `pack-qc` | `RUNBOOKS_BODY` | Quality & Testing |
+
+   Chi tiết cấu trúc HTML từng pack → [report-prompts.md "Pack-conditional sub-sections"](../../agents/pipeline/report-prompts.md).
+
+5. Markdown → HTML conversion (chỉ áp cho `{{*_BODY}}` placeholders): bảng map trong [report-prompts.md](../../agents/pipeline/report-prompts.md) hoặc cuối file `templates/report-fragments.html`.
+5. **Escape** tất cả text content (`& < > " '`) — kể cả trong `<pre><code>`.
+6. **Path rewrite**: link relative trong `.md` → resolve absolute từ workspace root → prefix `../` (HTML nằm trong `{ws}/reports/`). Vd `[x](../patterns/y.md)` trong `knowledge-map.md` → `href="../platform/patterns/y.md"`.
+7. **Citation**: mỗi block dùng fragment `citation` với `{{PATH}}` đã có prefix `../`.
+8. Section trống → fragment `nodata`.
+
+---
+
+## Bước 5 — Validate
+
+Trước khi Write, agent tự kiểm:
+
+- [ ] `grep '{{' output` không match (mọi placeholder đã thay)
+- [ ] `grep '<script src=\|<link href=\|<img src=' output | grep -E 'http|//'` = 0 match (no external resource)
+- [ ] Mỗi section có 1+ `<a class="cite"` HOẶC 1 `<p class="nodata">`
+- [ ] Đếm tag balance: `<section` = `</section`, `<details>` = `</details>`, `<dialog` = `</dialog>`
+- [ ] Không có tên workspace khác trong output (loop list workspaces, grep từng tên)
+- [ ] File size < 5MB (warn nếu vượt)
+- [ ] `md-cache` script tag tồn tại và parse được như JSON (sanity: nội dung bắt đầu `{` kết thúc `}`, không chứa raw `</script>` không escape)
+- [ ] Mỗi key trong `MD_CACHE` tương ứng 1 file `.md` thực có trong discovery (count match)
+- [ ] Nếu `effective_packs` không rỗng: với mỗi pack active, HTML chứa comment marker `<!-- pack:{pack-name} -->` (xác nhận injection đã chạy)
+
+Nếu fail bất kỳ check → STOP, in violation, KHÔNG ghi file. User fix wiki source rồi rerun.
+
+---
+
+## Bước 6 — Write file + update INDEX
+
+1. **Resolve output path**:
+   - Default: `{ws}/reports/{YYYY-MM-DD}-technical-report.html`
+   - Override `--out` nếu user pass.
+   - Nếu file tồn tại → append `-{HHMMSS}` trước extension.
+   - Tạo folder `{ws}/reports/` nếu chưa có (mkdir -p).
+2. **Write** file HTML.
+3. **Update INDEX**:
+   - File: `{ws}/reports/INDEX.md`. Tạo nếu chưa có với header.
+   - Append row: `| {YYYY-MM-DD HH:MM:SS} | technical-report | {filename} | {file_count} files |`
+4. In confirm message:
+   ```
+   ✅ Technical report generated
+      Workspace : {workspace_active}
+      Output    : {absolute path to HTML}
+      Sections  : Overview, Architecture ({n_projects} projects), Contracts ({n_c}), Patterns ({n_p}), Domains ({n_d}), ADRs ({n_adr}), Runbooks ({n_rb})
+      Files     : {file_count} source files scanned
+      Size      : {kb} KB
+
+   Open: start "" "{absolute path}"     (Windows)
+         open "{absolute path}"          (macOS)
+         xdg-open "{absolute path}"      (Linux)
+   ```
+
+   Nếu user pass `--open` → in cụm `Open: ...` đậm hơn (chỉ in suggestion, không tự exec).
+   Nếu `effective_packs` không rỗng → thêm dòng:
+   ```
+   Active packs : {effective_packs join ", "} ({n} pack sub-section(s) injected)
+   ```
+
+---
+
+## Hard constraints
+
+- Chỉ đọc file trong `{ws}/` của workspace active. KHÔNG cross-workspace.
+- KHÔNG đọc `{ws}/evidence/sources/*/raw.*` hoặc bất kỳ file trong `{ws}/evidence/`.
+- KHÔNG sinh nội dung không có trong wiki (no hallucination — section nào thiếu data ghi `nodata`).
+- Mỗi block content (paragraph, table, code, list) phải có citation về file nguồn (relative path từ workspace root).
+- HTML phải self-contained: không CDN, không external CSS/JS/font/img.
+- KHÔNG auto-exec command để mở browser.
+- KHÔNG ghi đè file report đã có (dùng suffix timestamp).
+- KHÔNG modify wiki source — chỉ READ.
+
+---
+
+## Khi nào nên chạy
+
+- Cần share knowledge wiki cho người không quen wiki (manager, stakeholder, dev mới).
+- Onboarding member mới — gửi 1 file HTML đọc offline.
+- Snapshot quarterly để track wiki growth (file giữ lại trong `reports/`).
+- Audit: rà 1 lần xem wiki đầy đủ tới đâu (section `nodata` cho biết gap).
+
+**KHI KHÔNG NÊN**:
+- Cần code generation context → dùng `/contextd-use` (không phải `/contextd-report`).
+- Cần snapshot codebase → dùng `/code-analyze` (raw evidence, khác mục đích).
+- Wiki vừa rebase/update lớn — chờ commit ổn định rồi sinh report (tránh report inconsistent).
+
+---
+
+## Common errors
+
+| Error | Fix |
+|---|---|
+| `Workspace not initialized` | Chạy `/new-workspace {name}` hoặc `/contextd-setup` |
+| `No data` ở section quan trọng (Architecture, Contracts) | Wiki thiếu nội dung — chạy `/code-analyze` hoặc `/evidence-apply` để bổ sung |
+| Validation fail: `external resource detected` | Wiki source có embed CDN/HTTP — fix file `.md` rồi rerun |
+| Validation fail: `placeholder not replaced` | Bug agent — báo lại để fix prompt; tạm thời rerun |
+| HTML quá lớn (> 5MB) | Wiki có file `.md` rất lớn — split file source rồi rerun |
+| Citation link không click được trong browser | File HTML và file `.md` phải cùng workspace root — mở HTML từ trong `{ws}/reports/` chứ đừng copy đi nơi khác |
+
+---
+
+## Related
+
+- [report-prompts.md](../../agents/pipeline/report-prompts.md) — section rules + markdown→HTML map
+- [HTML skeleton](../../templates/report-html-skeleton.html) — CSS/JS scaffold
+- [validator-rules.md](../../agents/pipeline/validator-rules.md) — engine rules `report-html-*`
+- [`/contextd-use`](contextd-use.md) — for code-generation context (not report)
+- [`/code-analyze`](code-analyze.md) — for codebase snapshot (not report)

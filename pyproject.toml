@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-context-kit"
+version = "1.3.2"
+description = "Build system for AI coding-agent context kits"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+
+[project.scripts]
+contextd = "scripts.cli:main"
+
+[tool.setuptools]
+py-modules = []
+packages = ["scripts", "scripts.lib"]
